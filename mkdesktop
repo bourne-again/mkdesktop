@@ -1077,7 +1077,7 @@ if [ -n "$idents" ]; then
 	if [ $mode_echo = false -a $mode_dry = false ]; then
 		clear && echo "Here is a preview of what I shall be doing"
 		echo
-		echo -e "(\e[7mstage name\e[0m :: package list as per stage definition)"
+		echo -e "(\e[4mstage name\e[0m :: package list as per stage definition)"
 		echo
 		echo "<<<<----"
 		echo
