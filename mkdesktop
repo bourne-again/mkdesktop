@@ -80,7 +80,7 @@ while echo "$1" | grep '^--' > /dev/null; do
 			
 			if [ $# -gt 0 ]; then
 				if echo $1 | grep '[^[:digit:]]' > /dev/null; then
-					die "LINENO" "Bad digital value for begin : $1"
+					die "$LINENO" "Bad digital value for begin : $1"
 				else
 					begin="$1"
 					arg_begin=true
@@ -95,7 +95,7 @@ while echo "$1" | grep '^--' > /dev/null; do
 			
 			if [ $# -gt 0 ]; then
 				if echo $1 | grep '[^[:digit:]]' > /dev/null; then
-					die "LINENO" "Bad digital value for end : $1"
+					die "$LINENO" "Bad digital value for end : $1"
 				else
 					end="$1"
 					arg_end=true
