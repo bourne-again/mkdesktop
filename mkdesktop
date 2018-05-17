@@ -242,8 +242,7 @@ fi
 for var in begin end; do 
 	eval val='$'$var
 
-	[ $var = end ] && [ $val = '-1' ] && val=0
-
+	[ $var = end ] && [ "$val" = "-1" ] && val=0
 	[ -z "$val" ] && die "$LINENO" "Empty string for $var"
 	
 	echo "$val" | grep '[^[:digit:]]' > /dev/null && \
@@ -260,9 +259,7 @@ if [ $begin -gt $end ]; then
 	die "$LINENO" "begin must not be greater than end"
 fi
 
-if [ $mode_echo = false -a $mode_dry = false ]; then
-	#Since if-fi blocks must not be empty, the line below allows the rest of
-	#this block to be commented, if you wish to hack away 'the root cause' : - )
+if [ "$mode_echo" = "false" -a "$mode_dry" = "false" ]; then
 	dummy=`expr $dummy + 1`
 	
 	[ `id -u` -eq 0 ] || die "You need to be root to execute this script"
@@ -270,7 +267,7 @@ fi
 
 f_stagezero()
 {
-	if [ $mode_echo = false -a $mode_dry = false ]; then
+	if [ "$mode_echo" = "false" -a "$mode_dry" = "false" ]; then
 		cat <<-EOF
 
 		This special stage has only one thing to do :
@@ -388,6 +385,7 @@ f_stage()
 
 	local file=""
 	eval local arg='$'list_${1}
+
 	local list="`echo $arg | sed 's/:/ /g'`"
 	
 	[ -f "$pkg_list_dir"/"$1" ] && file="$pkg_list_dir"/"$1"
@@ -395,7 +393,7 @@ f_stage()
 	if [ -n "$file" ]; then
 		fix_noeol "$file"
 		
-		[ $mode_append = false ] && list=""
+		[ "$mode_append" = "false" ] && list=""
 		lines="`cat $file | wc -l | sed 's/^[[:space:]]*//'`"
 		index=1
 		
@@ -418,16 +416,16 @@ f_stage()
 	
 	local cmd="pkg install"
 	
-	[ $mode_dry = true ] && \
+	[ "$mode_dry" = "true" ] && \
 	{ cmd="$cmd --dry-run"; } || \
-	{ [ $mode_yes = true ] && cmd="$cmd --yes"; }
+	{ [ "$mode_yes" = "true" ] && cmd="$cmd --yes"; }
 	
-	[ $mode_echo = true ] && cmd="echo"
+	[ "$mode_echo" = true ] && cmd="echo"
 
 	[ -z "$list" ] && echo || { $cmd $list; }
 	local r=$?
 
-	[ $mode_dry = true ] && [ $r -eq 1 ] && r=0
+	[ "$mode_dry" = "true" ] && [ $r -eq 1 ] && r=0
 	return $r
 }
 
@@ -437,9 +435,9 @@ f_stage()
 
 postproc()
 {
-	[ $mode_dry = true ] && return 0
-	[ $mode_echo = true ] && return 0
-	[ $no_postproc = true ] && return 0
+	[ "$mode_dry" = "true" ] && return 0
+	[ "$mode_echo" = "true" ] && return 0
+	[ "$no_postproc" = "true" ] && return 0
 
 	cat <<-EOF
 	
@@ -466,7 +464,7 @@ postproc()
 
 	b_valid=false
 
-	while [ $b_valid = false ]; do
+	while [ "$b_valid" = "false" ]; do
 		cat <<-EOF
 
 		Would you like me to kick off post-processing ?
@@ -600,16 +598,7 @@ postproc()
 				die "$LINENO" "Unable to kldload linux"
 			fi
 			
-			pkg install --yes linux-sublime3
-			r=$?
-
-			[ $r -eq 0 ] ||
-			{
-				echo "linux-sublime3 installation failed" 1>&2
-				echo "Retrying the Linuxulator with linux-opera" 1>&2
-				pkg install --yes linux-opera
-			}
-
+			pkg install --yes linux_base-c6
 			result_linux=$?
 		fi
 	fi
@@ -629,7 +618,7 @@ postproc()
 		f=/etc/fstab
 		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
 		
-		if [ $flavour_linux = false ]; then
+		if [ "$flavour_linux" = "false" ]; then
 			eval mandatory${mangled}="\"\
 fdescfs /dev/fd fdescfs rw 0 0
 procfs /proc procfs rw 0 0\""
@@ -661,7 +650,7 @@ linsysfs /compat/linux/sys linsysfs rw 0 0\""
 		f=/etc/devfs.conf
 		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
 		
-		if [ $flavour_linux = false ]; then
+		if [ "$flavour_linux" = "false" ]; then
 			eval mandatory${mangled}="\"\
 own     /dev/pci        root:operator
 perm    /dev/pci        0664
@@ -721,7 +710,7 @@ add path 'video*' mode 0664 group operator\""
 		f=/etc/rc.conf
 		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
 		
-		if [ $flavour_linux = false ]; then
+		if [ "$flavour_linux" = "false" ]; then
 			eval mandatory${mangled}="\"\
 devfs_system_ruleset=system
 dbus_enable=YES
@@ -764,7 +753,7 @@ keyrate=fast\""
 		f=/etc/sysctl.conf
 		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
 		
-		if [ $flavour_linux = false ]; then
+		if [ "$flavour_linux" = "false" ]; then
 			eval mandatory${mangled}=""
 
 			eval hint${mangled}="\"\
@@ -1074,7 +1063,7 @@ kern.vty=vt\""
 }
 
 if [ -n "$idents" ]; then
-	if [ $mode_echo = false -a $mode_dry = false ]; then
+	if [ "$mode_echo" = "false" -a "$mode_dry" = "false" ]; then
 		clear && echo "Here is a preview of what I shall be doing"
 		echo
 		echo -e "(\e[4mstage name\e[0m :: package list as per stage definition)"
@@ -1117,7 +1106,7 @@ Random/descending order of stages is not supported"
 		mode_echo=$my_mode_echo
 		b_valid=false
 	
-		while [ $b_valid = false ]; do
+		while [ "$b_valid" = "false" ]; do
 			cat <<-EOF
 			If you like the preview of what is to be done, give me a :
 
@@ -1177,7 +1166,7 @@ Random/descending order of stages is not supported"
 		die "$LINENO" "stage failure for stage $var"
 		
 		if [ $end -eq $level ]; then
-			[ $arg_end = true ] && exit 0 || break
+			[ "$arg_end" = "true" ] && exit 0 || break
 		fi
 	done
 
