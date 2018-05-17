@@ -117,7 +117,7 @@
 	stage=`expr $stage + 1`
 	eval $ident=$stage
 
-	eval list_${ident}="kde-baseapps:kde-runtime:kde-workspace"
+	eval list_${ident}="kde-baseapps-kde4:kde-runtime-kde4:kde-workspace-kde4:kdelibs-kde4"
 }
 
 {
