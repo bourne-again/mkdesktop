@@ -1,6 +1,5 @@
 Installing a FreeBSD desktop from scratch can be messy : you often forget the
-correct steps/packages. This script helps to standardize the process as much as
-possible per user, with plenty of flexibility as well as modularity.
+correct steps/packages. This script helps to standardize the process.
 
 Although you could lump all packages into a single list, breaking up the list
 into more stages allows for better, fine-grained control.
@@ -21,53 +20,38 @@ definition of this stage is empty, but you can pull in a lot of stuff -
 xclip:firefox:virtualbox-ose:libreoffice:smplayer
 
 desktop (level 4) is the stage for the base desktop. If you wish to install
-GNOME as the desktop, use gnome3. Or, for a lightweight version, try
-gnome3-lite. For a lightweight version of KDE4 (which is soon to be phased out
-when KDE5 becomes available under FreeBSD), the list below works as of this
-moment and also is the current default -
-kde-baseapps:kde-runtime:kde-workspace
+GNOME as the desktop, use gnome3. The current default is a lightweight version
+of KDE4 -
+kde-baseapps-kde4:kde-runtime-kde4:kde-workspace-kde4:kdelibs-kde4
 
-(Like stage x, the stage definition for desktop should preferably be as lean as
-possible).
+Just as with stage x, the stage definition for desktop should preferably be as
+lean as possible.
 
 post_desktop (level 5) is where you get the stuff that is desktop-specific. If
-you chose gnome3-lite as desktop, you can add some applications at this stage to
-make your desktop fuller (though the default setting for this stage is empty) -
-gnome-terminal:gedit:gdm:file-roller
+you chose KDE4 as desktop, you can pull in some additional applications from
+KDE itself or across other desktop environments -
+k3b:krita:ksnapshot:thunar:gnome-games
 
-Each stage can be defined in one/both of the following 2 ways :
+Each stage can be defined in 2 ways :
 
-1) list_<stage> is a colon-separated list of packages for the stage.  As you
-would expect, the default implementation has 5 such lists : list_pre_x, list_x,
-list_post_x, list_desktop, list_post_desktop.  These lists reside in their
-respective declarations in the file $HOME/mkdesktop/stage-definitions
-(specifically the line list_$ident=)
+1) list_<stage> is a colon-separated list of packages for the stage.
+The default implementation has 5 such lists :
+
+list_pre_x, list_x, list_post_x, list_desktop, list_post_desktop.
+
+These lists reside in their respective declarations in the file
+$HOME/mkdesktop/stage-definitions (specifically the line 'eval list_${ident}=')
 
 2) If a file named <stage> exists in the package list directory, it supersedes
-the definition of list_<stage> (unless you use --append).  Since the default
-implementation is wired for $HOME/mkdesktop/pkg_list as the package list
-directory, this script by default looks for files named pre_x, x, post_x,
-desktop and post_desktop therein. You can change the package list directory
-location by passing in "--pkg_list_dir <location>"
-
-If you create a custom stage named my_stage in the file
-$HOME/mkdesktop/stage-definitions, the script will automatically consider the
-file $HOME/mkdesktop/pkg_list/my_stage (if such a file exists) as the stage
-definition. If you do not wish to create a package list file for my_stage, you
-can specify the stage's package list by preparing the colon-separated list
-list_my_stage in $HOME/mkdesktop/stage-definitions itself (by populating the
-line list_$ident= in the definition).
+the definition of list_<stage>. Since the default implementation is wired for
+$HOME/mkdesktop/pkg_list as the package list directory, this script by default
+looks for files named pre_x, x, post_x, desktop and post_desktop therein. You
+can change the package list directory location by passing in the argument
+"--pkg_list_dir <location>"
 
 Unlike the colon-separated lists, package list files are newline-separated. If
 the first character on a line is '#' (hash without quotes), the line is ignored
 as a comment.
-
-If you create a file named (for example) mydummy in the package list directory,
-it comes into consideration only when a stage named mydummy has been declared in
-the file $HOME/mkdesktop/stage-definitions. Declaring a custom stage in the file
-stage-definitions is easy : you just need to copy out the sample at the top to a
-suitable location in the file and change the copy's ident string. Make sure the
-ident is unique.
 
 mkdesktop also bundles in 2 special functions : stagezero and postproc.
 
@@ -84,14 +68,5 @@ layer); Linuxulator (Linux emulation layer); configuration of system files :
 	Under /boot/	: loader.conf;
 }
 
-mkdesktop never processes standard input; so you cannot use it at the end of a
-pipeline. Diagnostic messages are always written to standard error.
-
-If this script makes FreeBSD desktop installation/configuration easier for you,
-consider backing up your stage-definitions file and your package list files. Tip
-: it might be a bit painful learning how to use mkdesktop the first time. But if
-you regularly install FreeBSD, you will soon appreciate the convenience it
-becomes.
- 
 If you [do not] like this script, consider emailing the author :
 Manish Jain (bourne.identity@hotmail.com)
