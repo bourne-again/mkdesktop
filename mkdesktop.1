@@ -1,4 +1,4 @@
-.TH man 1 "16 October 2018" "2.0" "mkdesktop man page"
+.TH man 1 "01 November 2018" "2.0" "mkdesktop man page"
 
 .SH NAME
 mkdesktop
@@ -32,7 +32,7 @@ In any subsequent run, whatever is the list of packages in the file
 desktop. Package list files are newline-separated.
 
 Although you could lump all packages into a single list, breaking up the
-list into more stages allows for better, fine-grained control. 
+list into more stages allows for better, fine-grained control.
 
 By default, 5 stages are considered, in order :
 
@@ -74,31 +74,15 @@ lists reside in their respective declarations in the file
 ~/mkdesktop/stage-definitions (specifically the line list_$ident=)
 
 2) If a file named <stage> exists in the package list directory, it
-supersedes the definition of list_<stage> (unless you use --append).
-Since the default implementation is wired for ~/mkdesktop/pkg_list as
-the package list directory, this script by default looks for files named
-pre_x, x, post_x, desktop and post_desktop therein. You can change the
-package list directory location by passing in "--pkg_list_dir
-<location>"
-
-If you create a custom stage named mystage in the file
-~/mkdesktop/stage-definitions, the script will automatically consider
-the file ~/mkdesktop/pkg_list/mystage (if such a file exists) as the
-stage definition. If you do not wish to create a package list file for
-mystage, you can specify the stage's package list by preparing the
-colon-separated list list_mystage in ~/mkdesktop/stage-definitions
-itself (by populating the line list_$ident= in the definition).
+supersedes the definition of list_<stage>. Since the default
+implementation is wired for ~/mkdesktop/pkg_list as the package list
+directory, this script by default looks for files named pre_x, x,
+post_x, desktop and post_desktop therein. You can change the package
+list directory location by passing in "--pkg_list_dir <location>"
 
 Unlike the colon-separated stage lists, package list files are
 newline-separated. If the first character on a line is '#' (hash without
 quotes), the line is ignored as a comment.
-
-If you create a file named (for example) mydummy in the package list
-directory, it comes into consideration only when a stage named mydummy
-has been declared in the file ~/mkdesktop/stage-definitions. Declaring
-a custom stage in the file stage-definitions is easy : you just need to
-copy out the sample at the top to a suitable location in the file and
-change the copy's ident string. Make sure the ident is unique.
 
 mkdesktop also bundles in 2 special functions : stagezero and postproc.
 
