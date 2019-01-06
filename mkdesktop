@@ -1,0 +1,1314 @@
+#!/bin/sh
+
+sz_usage="I need 0 (zero) mandatory args:  mkdesktop [optional arguments]
+
+Legend of [optional arguments] ::
+
+--begin <level> :	Use <level> as the first stage level to process
+(
+	defaults to 0. But you can specify a higher value <= the end value.
+
+	Stage 0 runs a special initialization procedure to set up your
+	graphics subsystem. Unlike regular stages, stage 0 cannot be
+	customized.
+)
+
+--end <level> :	Use <level> as the last stage to process
+(
+	defaults to the highest stage value available, as evaluated at runtime.
+	But you can change that to a lower value >= the begin value.
+)
+
+--pkg-list-dir <dir> :	Use <dir> as the package list directory
+(defaults to \$HOME/mkdesktop/pkg_list)
+
+--no-postproc :	Disable the postproc function that kicks in automatically upon
+processing of regular stages to configure emulation layers and system files.
+
+--dry :		in dry mode, special functions (stage 0; post-processor) are
+disabled and regular stage levels are processed by 'pkg install --dry-run',
+unless you specify --echo too (in which case the --dry argument is silently
+ignored). --dry can be used to test what packages (automatic as well as
+non-automatic) would get installed / total download size. --dry is available to
+non-root users too.
+
+--echo :	in echo mode, special functions (stage 0; post-processor) are
+disabled and regular stage levels are processed by 'echo', not 'pkg install'.
+--echo takes precedence over --dry, as well as is available to non-root users
+too. --echo can be used to test what top-level packages would get installed
+by this script.
+
+--yes :		Pass '--yes' to 'pkg install' by default during the processing of
+regular stages.
+
+--retry <retries> :		In case of 'pkg install' operational timeouts,
+retry the operation <retries> times. The default value for retries is 0.
+-1 can be used for infinite retries.
+
+--append :	in append mode, packages mentioned in package list files are
+appended to the stage definition lists, which otherwise would be superseded.
+
+--help :	print the man page.
+
+--usage :	print usage information."
+
+location=$HOME/mkdesktop
+pkg_list_dir="$location/pkg_list"
+no_postproc=false
+
+mode_echo=false
+mode_dry=false
+mode_append=false
+mode_yes=false
+
+begin=0
+end=-1
+retries=0
+
+dummy=0
+
+die()
+{
+	[ $# -eq 0 ] && exit 1
+
+	[ $# -gt 1 ] && \
+	echo "error initiated at line $1 :
+	$2" 1>&2 || \
+	echo "$1" 1>&2
+
+	exit 1
+}
+
+[ "`uname`" = "FreeBSD" ] || die $LINENO "This script is only for FreeBSD !"
+major=`uname -K | cut -c1,2`
+
+while echo "$1" | grep '^--' > /dev/null; do
+	case "$1" in
+		--begin)
+			shift
+			begin=""
+
+			if [ $# -gt 0 ]; then
+				if echo $1 | grep '[^[:digit:]]' > /dev/null; then
+					die "$LINENO" "Bad digital value for begin : $1"
+				else
+					begin="$1"
+					shift
+				fi
+			fi
+		;;
+
+		--end)
+			shift
+			end=""
+
+			if [ $# -gt 0 ]; then
+				if echo $1 | grep '[^[:digit:]]' > /dev/null; then
+					die "$LINENO" "Bad digital value for end : $1"
+				else
+					end="$1"
+					shift
+				fi
+			fi
+		;;
+
+		--retries)
+			shift
+			retries=""
+
+			if [ $# -gt 0 ]; then
+				if [ "$1" = "-1" ]; then
+					retries="$1"
+					shift
+				else
+					if echo $1 | grep '[^[:digit:]]' > /dev/null; then
+						die "$LINENO" "Bad digital value for retries : $1"
+					else
+						retries="$1"
+						shift
+					fi
+				fi
+			fi
+		;;
+
+		--pkg-list-dir)
+			shift
+			pkg_list_dir=""
+
+			if [ $# -gt 0 ]; then
+				pkg_list_dir="$1"
+				shift
+			fi
+		;;
+
+		--no-postproc)
+			shift
+			no_postproc=true
+		;;
+
+		--yes)
+			shift
+			mode_yes=true
+		;;
+
+		--dry)
+			shift
+			mode_dry=true
+		;;
+
+		--echo)
+			shift
+			mode_echo=true
+		;;
+
+		--append)
+			shift
+			mode_append=true
+		;;
+
+		--help)
+			man mkdesktop
+			exit $?
+		;;
+
+		--usage)
+			echo "$sz_usage"
+			exit 0
+		;;
+
+		*)
+			die "$LINENO" "Invalid optional arg : $1"
+		;;
+	esac
+done
+
+[ $# -eq 0 ] || { die "$sz_usage"; }
+
+stage=0
+idents=""
+
+for var in retries location pkg_list_dir; do
+	eval val='$'$var
+	[ -z "$val" ] && die "$LINENO" "Empty string for $var"
+done
+
+if ! [ -d "$location" ]; then
+	cat <<- EOF
+	This seems to be the first time you are running mkdesktop.
+
+	I can help you with the initial layout for running mkdesktop smoothly.
+
+	If you wish, I can :
+
+	1) 	create the directory $HOME/mkdesktop
+		(which hosts the stage-definitions file)
+
+	2) 	create a default $HOME/mkdesktop/stage-definitions
+		(which should be good enough to get you started)
+
+	What would you like me to do ?
+
+	I) Initialize the setup
+	S) Skip initialization
+
+	Press Control-C if you wish to abort.
+
+	Your choice ? (I/S) :
+	EOF
+
+	read answer
+
+	case "$answer" in
+		i|I)
+			set -e
+			mkdir -p $HOME/mkdesktop/pkg_list
+			cp /usr/local/share/mkdesktop/stage-definitions $HOME/mkdesktop/
+
+			cat <<- EOF
+
+			mkdesktop has been initialized.
+
+			If you wish to alter the stage-definitions or package list files for
+			this run, you can do still do it from another terminal window.
+
+			When ready, press Enter to continue  (or Control-C to abort).
+			EOF
+
+			read enter
+			set +e
+		;;
+
+		s|S)
+		;;
+
+		*)
+			echo "I could not make sense of your choice  : - ("  1>&2
+			exit 1
+		;;
+	esac
+fi
+
+[ -f "$location"/stage-definitions ] && \
+{ . "$location"/stage-definitions; } || \
+{ echo "Warning : $location/stage-definitions does not exist" 1>&2; }
+
+for var in begin end; do
+	eval val='$'$var
+
+	[ $var = end ] && [ "$val" = "-1" ] && val=0
+	[ -z "$val" ] && die "$LINENO" "Empty string for $var"
+
+	echo "$val" | grep '[^[:digit:]]' > /dev/null && \
+	die "$LINENO" "Bad digital value ($var) : ${val}"
+done
+
+[ $end -gt $stage ] && \
+die "$LINENO" "end must not be greater than the highest stage value ($stage)"
+
+[ $end -eq -1 ] && end=$stage
+
+if [ $begin -gt $end ]; then
+	[ $end -eq 0 ] && echo "Have you defined at least one stage ?" 1>&2
+	die "$LINENO" "begin must not be greater than end"
+fi
+
+if [ "$mode_echo" = "false" -a "$mode_dry" = "false" ]; then
+	[ `id -u` -eq 0 ] || die "You need to be root to execute this script"
+fi
+
+drmpkg=""
+drmpkg_opt=""
+drmkld=""
+drmkld_opt=""
+
+f_stagezero()
+{
+	[ $mode_echo = true ] && return 0
+	[ $mode_dry = true ] && return 0
+
+	valid=false
+
+	while [ $valid = false ]; do
+		echo
+		echo "Should I set up the graphics subsystem for your box ?  (y/n) :"
+		read answer
+
+		case "$answer" in
+			y|Y|yes)
+				valid=true
+			;;
+
+			n|N|no)
+				valid=true
+				return 0
+			;;
+
+			*)
+				echo "I could not make sense of that !" 1>&2
+			;;
+		esac
+	done
+
+	valid=false
+
+	while [ $valid = false ]; do
+		echo
+
+		cat <<- EOF
+		What is your graphics chipset :
+	
+		1) AMD integrated (GPU)
+		2) AMD/ATI Radeon dedicated card
+		3) NVidia dedicated card
+		4) Intel integrated (GPU)
+		5) something I am not aware of
+	
+		Your choice  ?  (1/2/3/4/5) :
+		EOF
+	
+		read answer
+
+		case "$answer" in
+			1)
+				valid=true
+                drmpkg="drm-kmod xf86-video-amdgpu"
+                drmkld="/boot/modules/amdgpu.ko"
+			;;
+	
+			2)
+				valid=true
+                drmpkg="drm-kmod xf86-video-ati"
+                drmkld="/boot/modules/radeonkms.ko"
+			;;
+	
+			3)
+				valid=true
+                drmpkg="nvidia-driver"
+                drmkld="/boot/modules/nvidia.ko /boot/modules/nvidia-modeset.ko"
+			;;
+	
+			4)
+				valid=true
+                drmpkg="drm-kmod xf86-video-intel"
+                drmkld="/boot/modules/i915kms.ko"
+			;;
+	
+			5)
+				valid=true
+			;;
+	
+			*)
+				echo "I do not know what to make of that  : - (" 1>&2
+			;;
+		esac
+
+	done
+
+	return 0
+}
+
+flushpkg()
+{
+    echo && echo "Beginning flush for DRM kernel packages ..."
+        for p in $drmpkg $drmpkg_opt; do
+            if pkg rquery "%n" $p > /dev/null; then
+                pkg install --yes $p || die $LINENO "pkg install failed for: $p"
+            else
+                echo "Warning: pkg rquery failed for: $p" 1>&2
+            fi
+        done
+
+        drmpkg=""
+        drmpkg_opt=""
+    echo "Done flush for DRM  kernel packages"
+}
+
+flushkld()
+{
+    echo && echo "Beginning flush for DRM kernel modules ..."
+	if [ -n "${drmkld}${drmkld_opt}" ]; then
+		kldall="$drmkld"
+		[ -n "$drmkld_opt" ] && kldall="$kldall $drmkld_opt"
+		echo "kld_list=\"$kldall\"" >> /etc/rc.conf
+        drmkld=""
+        drmkld_opt=""
+	fi
+    echo "Done flush for DRM  kernel modules"
+}
+
+[ $begin -gt 0 ] || f_stagezero
+[ $? -eq 0 ] || die "$LINENO" "Failure setting up graphics subsystem"
+[ $end -eq 0 ] && { flushpkg; flushkld; exit 0; }
+
+fix_noeol()
+{
+	[ $# -gt 0 ] || { echo "missing mandatory arg : <file>" 1>&2; return 1; }
+	[ -f "$1" ] || { echo "$1 is not a regular file" 1>&2; return 1; }
+
+	local r=0
+	local f="$1"
+
+	if file "$f" | grep '\<ASCII text\>' > /dev/null; then
+		local last="`tail -c1 \"$f\"`"
+
+		if [ -n "$last" ]; then
+			[ -w "$f" ] || { echo "$f is not writable" 1>&2; return 1; }
+
+		 	echo >> "$f"
+			r=$?
+		fi
+	fi
+
+	return $r
+}
+
+f_stage()
+{
+	[ $# -ne 1 ] && \
+	{ echo "f_stage() :: I need 1 arg : stage name (ident)" 1>&2; return 1; }
+
+	[ -z "$1" ] && \
+	{ echo "f_stage() :: I need 1 arg : stage name (ident)" 1>&2; return 1; }
+
+	if ! echo "$idents" | grep -w "$1" > /dev/null; then
+		echo "f_stage() :: I could not locate $1 among the definitions" 1>&2
+		return 1
+	fi
+
+	echo -e "\e[4m${1}\e[0m :: \c"
+
+	local nextline=""
+	local firstchar=""
+	local lines=0
+	local index=0
+
+	local file=""
+	eval local arg='$'list_${1}
+
+	local list="`echo $arg | sed 's/:/ /g'`"
+	[ -f "$pkg_list_dir"/"$1" ] && file="$pkg_list_dir"/"$1"
+
+	if [ -n "$file" ]; then
+		fix_noeol "$file"
+
+		[ "$mode_append" = "false" ] && list=""
+		lines="`cat $file | wc -l | sed 's/^[[:space:]]*//'`"
+		index=1
+
+		while [ $index -le $lines ]; do
+			nextline="`sed -n ${index}p $file`"
+
+			if [ -n "$nextline" ]; then
+				firstchar="`echo $nextline | cut -c1`"
+
+				if [ "$firstchar" = '#' ]; then
+					dummy=`expr $dummy + 1`
+				else
+					[ -z "$list" ] && list="$nextline" || list="$list $nextline"
+				fi
+			fi
+
+			index=`expr $index + 1`
+		done
+	fi
+
+	local cmd="pkg install"
+
+	[ "$mode_dry" = "true" ] && \
+	{ cmd="$cmd --dry-run"; } || \
+	{ [ "$mode_yes" = "true" ] && cmd="$cmd --yes"; }
+
+	[ "$mode_echo" = true ] && cmd="echo"
+
+	[ -z "$list" ] && echo || { echo; $cmd $list; }
+	local r=$?
+
+	[ "$mode_dry" = "true" ] && [ $r -eq 1 ] && r=0
+	return $r
+}
+
+postproc()
+{
+	[ "$mode_dry" = "true" ] && return 0
+	[ "$mode_echo" = "true" ] && return 0
+	[ "$no_postproc" = "true" ] && return 0
+
+	cat <<- EOF
+
+	Your desktop has been successfully installed  : - )
+
+	I am now going to start post-install processing to set up the following :
+
+	Wine 		(32-bit/64-bit Windows emulation layer, user-space)
+	Linuxulator	(64-bit Linux emulation layer, kernel-space)
+
+	System files :
+	/etc/fstab
+	/etc/devfs.conf
+	/etc/devfs.rules
+	/etc/rc.conf
+	/etc/sysctl.conf
+	/boot/loader.conf
+
+	I will seek permission from you for each of the above individually  : - )
+
+	Note :	If you ask me to configure system files, existing originals will be
+			saved with .bak extension
+	EOF
+
+	b_valid=false
+
+	while [ "$b_valid" = "false" ]; do
+		cat <<- EOF
+
+		Would you like me to kick off post-processing ?
+
+		y) Do it
+		n) Cancel this [and exit immediately]
+
+		Your choice  ?  (y/n) :
+		EOF
+
+		read answer
+
+		case "$answer" in
+			y|Y|yes)
+				b_valid=true
+			;;
+
+			n|N|no)
+				b_valid=true
+				exit 0
+			;;
+
+			*)
+				echo "I do not know what to make of that  : - (" 1>&2
+			;;
+		esac
+	done
+
+	readonly UNITY=1
+	readonly WIN32=$(( UNITY<<1 ))
+	readonly WIN64=$(( UNITY<<2 ))
+	readonly LINUX=$(( UNITY<<3 ))
+
+	echo && echo "Beginning postproc ..."
+
+	EMU=0
+
+	b_valid=false
+
+	while [ "$b_valid" = "false" ]; do
+		echo && echo "Would you like me to set up Wine (Windows emulation layer) ?  (y/n) :"
+		read answer
+
+		case "$answer" in
+			y|Y|yes)
+				b_valid=true
+				b2_valid=false
+
+				while [ "$b2_valid" = "false" ]; do
+					cat <<- EOF
+
+					Choose a mode :
+
+					1) 32-bit
+					2) 64-bit (This won't work if your system's CPU is 32-bit)
+					c) cancel Wine
+					EOF
+
+					read answer
+	
+					case "$answer" in
+						1)
+							b2_valid=true
+							EMU=$(( EMU | UNITY | WIN32 ))
+						;;
+	
+						2)
+							b2_valid=true
+							EMU=$(( EMU | UNITY | WIN64 ))
+						;;
+	
+						c|C)
+							b2_valid=true
+						;;
+	
+						*)
+							echo "I do not know what that means  : - ("  1>&2
+						;;
+					esac
+				done
+			;;
+
+			n|N|no)
+				b_valid=true
+			;;
+
+			*)
+				echo "I do not know what that means  : - ("  1>&2
+			;;
+		esac
+	done
+
+	b_valid=false
+
+	while [ "$b_valid" = "false" ]; do
+		echo &&	echo "Would you like me to set up Linuxulator (Linux emulation) ?  (y/n) :"
+		echo "(If you choose yes, I will factor the Linuxulator into subsequent processing)"
+		read answer
+
+		case "$answer" in
+			y|Y|yes)
+				b_valid=true
+				EMU=$(( EMU | UNITY | LINUX ))
+			;;
+
+			n|N|no)
+				b_valid=true
+			;;
+
+			*)
+				echo "I do not know what that means  : - ("  1>&2
+			;;
+		esac
+	done
+
+	my_emu=$(( EMU & UNITY ))
+
+	result_win32=1
+	result_win64=1
+	result_linux=1
+
+	if [ $my_emu -ne 0 ]; then
+		my_emu=$(( EMU & WIN32 ))
+
+		if [ $my_emu -ne 0 ]; then
+			pkg install --yes i386-wine wine-mono wine-gecko
+			result_win32=$?
+		fi
+
+		my_emu=$(( EMU & WIN64 ))
+
+		if [ $my_emu -ne 0 ]; then
+			pkg install --yes wine wine-mono wine-gecko
+			result_win64=$?
+		fi
+
+		my_emu=$(( EMU & LINUX ))
+
+		if [ $my_emu -ne 0 ]; then
+			if ! kldstat -q -n linux; then
+				kldload linux
+
+				[ $? -eq 0 ] || \
+				die "$LINENO" "Unable to kldload linux"
+			fi
+
+			if [ "`uname -m`" = "amd64" ]; then
+				if ! kldstat -q -n linux64; then
+					kldload linux64
+
+					[ $? -eq 0 ] || \
+					die "$LINENO" "Unable to kldload linux64"
+				fi
+			fi
+
+			pkg install --yes linux_base-c6
+			result_linux=$?
+		fi
+	fi
+
+	flavour_linux=false
+
+	if [ $(( EMU & LINUX )) -ne 0 ]; then
+		if [ $result_linux -eq 0 ]; then
+			flavour_linux=true
+		fi
+	fi
+
+	set -e
+
+	#block for /etc/fstab
+	{
+		f=/etc/fstab
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		if [ "$flavour_linux" = "false" ]; then
+			eval mandatory${mangled}="\"\
+fdescfs /dev/fd fdescfs rw 0 0
+procfs /proc procfs rw 0 0\""
+
+			eval hint${mangled}="\"\
+If you are going to use the Linuxulator to run Linux applications under
+FreeBSD natively, try this/these in $f once you have setup the Linuxulator
+(most easily done in a single command with 'pkg install linux-sublime3') :\""
+
+			eval suggested${mangled}="\"\
+tmpfs /compat/linux/dev/shm tmpfs rw,mode=1777,size=1g 0 0
+linprocfs /compat/linux/proc linprocfs rw 0 0
+linsysfs /compat/linux/sys linsysfs rw 0 0\""
+		else
+			eval mandatory${mangled}="\"\
+fdescfs /dev/fd fdescfs rw 0 0
+procfs /proc procfs rw 0 0
+tmpfs /compat/linux/dev/shm tmpfs rw,mode=1777,size=1g 0 0
+linprocfs /compat/linux/proc linprocfs rw 0 0
+linsysfs /compat/linux/sys linsysfs rw 0 0\""
+
+			eval hint${mangled}=""
+			eval suggested${mangled}=""
+		fi
+	}
+
+	#block for /etc/devfs.conf
+	{
+		f=/etc/devfs.conf
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		if [ "$flavour_linux" = "false" ]; then
+			eval mandatory${mangled}="\"\
+own     /dev/pci        root:operator
+perm    /dev/pci        0664
+own     /dev/dri/card0  root:operator
+perm    /dev/dri/card0  0664
+own     /dev/pass0      root:operator
+perm    /dev/pass0      0664
+own     /dev/cd0        root:operator
+perm    /dev/cd0        0664
+own     /dev/xpt0       root:operator
+perm    /dev/xpt0       0664\""
+
+			eval hint${mangled}="\"\
+If you're going to use the Linuxulator to run Linux applications under
+FreeBSD natively, try this/these in $f once you have setup the Linuxulator
+(most easily done in a single command with 'pkg install linux-sublime3') :\""
+
+			eval suggested${mangled}="\"\
+link /compat/linux/dev/shm shm\""
+		else
+			eval mandatory${mangled}="\"\
+own     /dev/pci        root:operator
+perm    /dev/pci        0664
+own     /dev/dri/card0  root:operator
+perm    /dev/dri/card0  0664
+own     /dev/pass0      root:operator
+perm    /dev/pass0      0664
+own     /dev/cd0        root:operator
+perm    /dev/cd0        0664
+own     /dev/xpt0       root:operator
+perm    /dev/xpt0       0664
+link /compat/linux/dev/shm shm\""
+
+			eval hint${mangled}=""
+			eval suggested${mangled}=""
+		fi
+	}
+
+	#block for /etc/devfs.rules
+	{
+		f=/etc/devfs.rules
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		eval mandatory${mangled}="\"\
+[system=10]
+add path 'usb/*' mode 0664 group operator
+add path 'cd*' mode 0664 group operator
+add path 'da*' mode 0664 group operator
+add path 'video*' mode 0664 group operator\""
+
+		eval hint${mangled}=""
+		eval suggested${mangled}=""
+	}
+
+	#block for /etc/rc.conf
+	{
+		f=/etc/rc.conf
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		if [ "$flavour_linux" = "false" ]; then
+			eval mandatory${mangled}="\"\
+devfs_system_ruleset=system
+dbus_enable=YES
+hald_enable=YES
+cupsd_enable=YES\""
+
+			eval hint${mangled}="\"\
+Here's a few more goodies for you to keep in mind for ${f} :
+
+1) For fuse to be able to mount non-native filesystems like ntfs/ext4
+2) For a decent typing speed on the console
+3) For auto-loading linux.ko\""
+
+			eval suggested${mangled}="\"\
+fusefs_enable=YES
+keyrate=fast
+linux_enable=YES\""
+		else
+			eval mandatory${mangled}="\"\
+devfs_system_ruleset=system
+dbus_enable=YES
+hald_enable=YES
+linux_enable=YES
+cupsd_enable=YES\""
+
+			eval hint${mangled}="\"\
+Here's a few more goodies for you to keep in mind for ${f} :
+
+1) For fuse to be able to mount non-native filesystems like ntfs/ext4
+2) For a decent typing speed on the console\""
+
+			eval suggested${mangled}="\"\
+fusefs_enable=YES
+keyrate=fast\""
+		fi
+	}
+
+	#block for /etc/sysctl.conf
+	{
+		f=/etc/sysctl.conf
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		if [ "$flavour_linux" = "false" ]; then
+			eval mandatory${mangled}=""
+
+			eval hint${mangled}="\"\
+You might like to keep in mind a few other suggestions for ${f}, all optional.
+1 goodie to let normal users mount disks and 2 Linuxulator goodies :\""
+
+			eval suggested${mangled}="\"\
+vfs.usermount=1
+compat.linux.osrelease=2.6.32
+kern.ipc.shm_allow_removed=1\""
+		else
+			eval mandatory${mangled}="\"\
+compat.linux.osrelease=2.6.32
+kern.ipc.shm_allow_removed=1\""
+
+			eval hint${mangled}="\"\
+For $f, keep in mind a tip to let normal users mount disks :\""
+
+			eval suggested${mangled}="\"\
+vfs.usermount=1\""
+		fi
+	}
+
+	#block for /boot/loader.conf
+	{
+		f=/boot/loader.conf
+		mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+
+		eval mandatory${mangled}="\"\
+kern.vty=vt\""
+
+		eval hint${mangled}=""
+		eval suggested${mangled}=""
+	}
+
+	for f in /etc/fstab; do
+		b_valid=false
+
+		while [ $b_valid = false ]; do
+			echo && echo "Configure $f : (y/n) ?"
+			read answer
+
+			case "$answer" in
+				y|Y|yes)
+					b_valid=true
+					mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+					eval mandatory='$'mandatory${mangled}
+
+					if [ -f $f ]; then
+						if [ -n "$mandatory" ]; then
+							cp $f $f.bak
+
+							maxlines=`echo "$mandatory" | wc -l | sed 's|^[[:space:]]*||'`
+							index=1
+
+							while [ $index -le $maxlines ]; do
+								line="`echo \"$mandatory\" | sed -n ${index}p`"
+								token1=`echo $line | awk '{print $1}'`
+
+								if ! cat $f | grep --silent "^$token1[[:space:]]"; then
+									echo $line >> $f
+								fi
+
+								index=`expr $index + 1`
+							done
+						fi
+					else
+						echo "$mandatory" > $f
+					fi
+
+					echo && echo "Done configuring $f"
+					eval hint='$'hint${mangled}
+					eval suggested='$'suggested${mangled}
+
+					if [ -n "$suggested" ]; then
+						echo "$hint"
+						echo && echo "$suggested"
+					fi
+				;;
+
+				n|N|no)
+					b_valid=true
+				;;
+
+				*)
+					echo "I do not know what that means  : - ("
+				;;
+			esac
+		done
+	done
+
+	for f in /etc/devfs.conf; do
+		b_valid=false
+
+		while [ $b_valid = false ]; do
+			echo && echo "Configure $f : (y/n) ?"
+			read answer
+
+			case "$answer" in
+				y|Y|yes)
+					b_valid=true
+					mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+					eval mandatory='$'mandatory${mangled}
+
+					if [ -f $f ]; then
+						if [ -n "$mandatory" ]; then
+							cp $f $f.bak
+
+							maxlines=`echo "$mandatory" | wc -l | sed 's|^[[:space:]]*||'`
+							index=1
+
+							while [ $index -le $maxlines ]; do
+								line="`echo \"$mandatory\" | sed -n ${index}p`"
+
+								if ! cat $f | grep --silent "$line"; then
+									token1=`echo $line | awk '{print $1}'`
+									token3=`echo $line | awk '{print $3}'`
+
+									token2=`echo $line | awk '{print $2}'`
+									token2_alt=`echo $token2 | sed -n 's|^/dev/||p'`
+									t2_lastchar=`echo $token2 | rev | cut -c1`
+
+									search="^${token1}[[:space:]]+${token2}[[:space:]]"
+
+									if [ -n "$token2_alt" ]; then
+										search="^${token1}[[:space:]]+(${token2}|${token2_alt})[[:space:]]"
+									fi
+
+									if [ "$t2_lastchar" = "0" ]; then
+										lead=`echo $token2 		| sed -n 's|^\(.*[^[:digit:]]\)\([[:digit:]]*\)$|\1|p'`
+										trail=`echo $token2 	| sed -n 's|^\(.*[^[:digit:]]\)\([[:digit:]]*\)$|\2|p'`
+
+										while [ -c $token2 ]; do
+											if ! cat $f | egrep --silent "$search"; then
+												echo $line >> $f
+											fi
+
+											trail=`expr $trail + 1`
+											token2="${lead}${trail}"
+											token2_alt=`echo $token2 | sed -n 's|^/dev/||p'`
+											line="$token1 $token2 $token3"
+
+											search="^${token1}[[:space:]]+${token2}[[:space:]]"
+
+											if [ -n "$token2_alt" ]; then
+												search="^${token1}[[:space:]]+(${token2}|${token2_alt})[[:space:]]"
+											fi
+										done
+									else
+										if [ -c $token2 ]; then
+											if ! cat $f | egrep --silent "$search"; then
+												echo $line >> $f
+											fi
+										fi
+									fi
+								fi
+
+								index=`expr $index + 1`
+							done
+						fi
+					else
+						echo "$mandatory" > $f
+					fi
+
+					echo && echo "Done configuring $f"
+					eval hint='$'hint${mangled}
+					eval suggested='$'suggested${mangled}
+
+					if [ -n "$suggested" ]; then
+						echo "$hint"
+						echo && echo "$suggested"
+					fi
+				;;
+
+				n|N|no)
+					b_valid=true
+				;;
+
+				*)
+					echo "I do not know what that means  : - ("
+				;;
+			esac
+		done
+	done
+
+	for f in /etc/devfs.rules; do
+		b_valid=false
+
+		while [ $b_valid = false ]; do
+			echo && echo "Configure $f : (y/n) ?"
+			read answer
+
+			case "$answer" in
+				y|Y|yes)
+					b_valid=true
+					mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+					eval mandatory='$'mandatory${mangled}
+
+					if [ -f $f ]; then
+						if [ -n "$mandatory" ]; then
+							cp $f $f.bak
+
+							line="`echo \"$mandatory\" | sed -n 1p`"
+
+							if ! cat $f | grep --silent "$line"; then
+								echo "$mandatory" >> $f
+							fi
+						fi
+					else
+						echo "$mandatory" > $f
+					fi
+
+					echo && echo "Done configuring $f"
+					eval hint='$'hint${mangled}
+					eval suggested='$'suggested${mangled}
+
+					if [ -n "$suggested" ]; then
+						echo "$hint"
+						echo && echo "$suggested"
+					fi
+				;;
+
+				n|N|no)
+					b_valid=true
+				;;
+
+				*)
+					echo "I do not know what that means  : - ("
+				;;
+			esac
+		done
+	done
+
+	for f in /etc/rc.conf /etc/sysctl.conf /boot/loader.conf; do
+		b_valid=false
+
+		while [ $b_valid = false ]; do
+			echo && echo "Configure $f : (y/n) ?"
+			read answer
+
+			case "$answer" in
+				y|Y|yes)
+					b_valid=true
+					mangled=`echo $f | sed 's|[^[:alpha:]]|_|g'`
+					eval mandatory='$'mandatory${mangled}
+
+					if [ -f $f ]; then
+						if [ -n "$mandatory" ]; then
+							cp $f $f.bak
+
+							maxlines=`echo "$mandatory" | wc -l | sed 's|^[[:space:]]*||'`
+							index=1
+
+							while [ $index -le $maxlines ]; do
+								line="`echo \"$mandatory\" | sed -n ${index}p`"
+
+								if ! cat $f | grep --silent "$line"; then
+									token1=`echo $line | awk -F= '{print $1}'`
+									token2=`echo $line | awk -F= '{print $2}'`
+
+									search="^${token1}="
+
+									if ! cat $f | egrep --silent "$search"; then
+										echo $line >> $f
+									fi
+								fi
+
+								index=`expr $index + 1`
+							done
+						fi
+					else
+						echo "$mandatory" > $f
+					fi
+
+					echo && echo "Done configuring $f"
+					eval hint='$'hint${mangled}
+					eval suggested='$'suggested${mangled}
+
+					if [ -n "$suggested" ]; then
+						echo "$hint"
+						echo && echo "$suggested"
+					fi
+				;;
+
+				n|N|no)
+					b_valid=true
+				;;
+
+				*)
+					echo "I do not know what that means  : - ("
+				;;
+			esac
+		done
+	done
+
+	set +e
+	echo && echo "Post-processing done."
+
+	b_valid=false
+
+	while [ $b_valid = false ]; do
+		cat <<- EOF
+		One final nicety I can perform is setting up SLiM, the very
+		versatile X login (aka display) manager that can start any desktop
+		along with system startup. (Just use F1 to cycle through available
+		sessions).
+	
+		Selecting yes does three things (besides installing the slim package):
+	
+		1) Writes/overwrites .xinitrc for standard HOMES (/home/<*> ; /root)
+		2) Places a hook for new users via /usr/share/skel/dot.xinitrc
+		3) Adds existing users to the system group 'video'
+	
+		Would you like me to set up the SLiM login manager : (y/n) ?
+		EOF
+	
+		read answer
+	
+		case "$answer" in
+			y|Y|yes)
+				b_valid=true
+				pkg install --yes slim
+				echo 'slim_enable=YES' >> /etc/rc.conf
+				echo 'exec $1' > /usr/share/skel/dot.xinitrc
+	
+				for u in `ls /home/ 2>/dev/null`; do
+					if [ -n "$u" -a -d "$u" ]; then
+						if cat /etc/passwd | grep -q "^$u:"; then
+							echo 'exec $1' > /home/$u/.xinitrc
+							chown $u /home/$u/.xinitrc
+							pw groupmod -n video -m $u
+						fi
+					fi
+				done
+	
+				echo 'exec $1' > /root/.xinitrc
+			;;
+	
+			n|N|no)
+				b_valid=true
+			;;
+	
+			*)
+				echo "I do not know what that means  : - ("
+			;;
+		esac
+	done
+
+	echo
+
+	cat <<- EOF
+	mkdesktop done setting up your desktop.
+	If you saw no errors anywhere, your box is raring to go  : - )
+	A reboot is now needed - you will need to do that yourself.
+	EOF
+}
+
+stagewalk()
+{
+	previous_level=0
+
+	for var in $idents; do
+		eval level='$'$var
+
+		[ -z "$level" ] && \
+		die "$LINENO" "level must not evaluate as an empty string"
+
+		echo "$level" | grep '[^[:digit:]]' > /dev/null && \
+		die "$LINENO" "level must be numeric"
+
+		if [ $level -ne `expr $previous_level + 1` ]; then
+			die "$LINENO" \
+"This level is ${level}; Previous was ${previous_level}
+Random/descending order of stages is not supported"
+		fi
+
+		if [ $begin -gt $level ]; then
+			previous_level=$level
+		else
+			local iter=0
+			local result=3     # Operational timeouts return 3
+		
+			while [ $result -eq 3 ]; do
+				if [ $retries -eq -1 ]; then
+					f_stage $var; result=$?
+				elif [ $iter -le $retries ]; then
+					f_stage $var; result=$?
+				else
+					break
+				fi
+			
+				iter=`expr $iter + 1`
+			done
+
+			if [ $result -eq 0 ]; then
+				previous_level=$level
+			else
+				[ $result -eq 3 ] && \
+				die "$LINENO" "stage failure@$var: op_timeouts > retries" || \
+				die "$LINENO" "stage failure@$var: pkg error $result"
+			fi
+		fi
+
+		[ $end -eq $level ] && { break; }
+	done
+}
+
+if [ -n "$idents" ]; then
+	if [ "$mode_echo" = "false" -a "$mode_dry" = "false" ]; then
+		readonly mode_echo_saved=$mode_echo
+		mode_echo=true
+
+		clear && echo "Here is a preview of what I shall be doing"
+		echo
+		echo -e "(\e[4mstage name\e[0m :: package list as per stage definition)"
+		echo
+		echo "<<<<----"
+		stagewalk
+		echo "---->>>>"
+		echo
+
+		mode_echo=$mode_echo_saved
+
+		echo "Press Enter when you have read the preview"
+		read enter
+		clear
+
+		if [ $mode_yes = true ]; then
+			echo "Press Enter to continue with installation of the preview"
+			echo "Or else press Ctrl+C to abort."
+			read enter
+		else
+
+			b_valid=false
+
+			while [ "$b_valid" = "false" ]; do
+				cat <<- EOF
+				If you like the preview of what is to be done, give me a :
+
+				y) Install the stages
+				
+				-OR-
+
+				Y) Install stages non-interactively with 'pkg install --yes'
+				(If you enter Y, just wait a few minutes/hours, and your
+				entire 	desktop will get assembled nicely and I shall bother
+				you only for the post-processing when the desktop has been
+				put together)
+
+				If you would like to modify the installation, press Control-C
+				to abort - and then alter the package list files.
+
+				Your choice  ? (y/Y) :
+				EOF
+
+				read answer
+
+				case "$answer" in
+					y)
+						b_valid=true
+					;;
+
+					Y)
+						b_valid=true
+						mode_yes=true
+					;;
+
+					*)
+						echo "I do not know what to make of that  : - (" 1>&2
+					;;
+				esac
+			done
+		fi
+	fi
+
+	stagewalk
+    flushpkg
+    flushkld
+	postproc
+fi
+
+exit $?
