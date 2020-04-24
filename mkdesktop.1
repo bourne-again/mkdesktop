@@ -1,4 +1,4 @@
-.TH man 1 "23 April, 2020" "4.0" "mkdesktop man page"
+.TH man 1 "24 April, 2020" "4.0" "mkdesktop man page"
 
 .SH NAME
 mkdesktop
@@ -21,18 +21,21 @@ and a bit more. The application then winds up by setting up any emulation
 layers (Wine / Linuxulator) you might wish to use and configuring login
 management with SDDM.
 
-mkdesktop also bundles in 2 special functions : stagezero and postproc.
+mkdesktop bundles in 2 special functions : stagezero and postproc.
 
-stagezero corresponds to Level 0 and is launched at startup. This stage
-caters to setting up the graphics environment for the various graphics
-chipsets (Radeon/NVidia/Intel/AMDGPU), pkg's and kld's for which are
+stagezero is launched at startup. This function caters to setting up
+the graphics environment for the various graphics chipsets
+(Radeon/NVidia/Intel/AMDGPU), pkg's and kld's for which are
 configured as needed.
 
-postproc gets automatically invoked when the regular stages have been
-processed.  It sets up :
+The application then performs user management and the actual desktop
+installation.
 
-Wine (Windows emulation layer);
-Linuxulator (Linux emulation layer);
+postproc gets automatically invoked at the end once the desktop has been
+installed. It sets up :
+
+Wine (Windows emulation layer - optional);
+Linuxulator (Linux emulation layer - optional);
 
 Configuration of system files :
 
@@ -43,7 +46,7 @@ Configuration of system files :
 /etc/sysctl.conf
 /boot/loader.conf.
 
-The final step the postproc function executes is setting up X login
+The final step the script function executes is setting up X login
 management with SDDM.
 
 Tip : If you regularly install FreeBSD, you will appreciate the
@@ -56,7 +59,10 @@ convenience mkdesktop soon becomes.
 desktop-installer(1)
 
 .SH BUGS
-No known bugs.
+mkdesktop is best used in a pristine environment when system files
+(e.g. /etc/fstab; /etc/rc.conf) have not yet been modified. Executing
+mkdesktop when system files have been modified could lead to
+conflicts in existing settings and settings imposed by mkdesktop.
 
 .SH AUTHOR
 Manish Jain (bourne.identity@hotmail.com)
