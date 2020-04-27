@@ -421,7 +421,7 @@ are wheel and operator."
 	fi
 
 	echo "sddm_enable=YES" >> /etc/rc.conf
-	[ b_nvidia = true ] && /usr/local/bin/nvidia-xconfig
+	[ $b_nvidia = true ] && /usr/local/bin/nvidia-xconfig
 
 	postproc
 	r=$?
