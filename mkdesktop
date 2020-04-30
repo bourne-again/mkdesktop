@@ -395,7 +395,7 @@ if [ $r -eq 0 ]; then
 		5) desktop="lxde-meta";;
 	esac
 
-	pkglist="xorg sddm $desktop"
+	pkglist="xorg sddm hal dbus $desktop"
 
 	r=1
 	
