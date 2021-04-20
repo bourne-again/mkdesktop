@@ -1,4 +1,4 @@
-.TH man 1 "30 April, 2020" "4.3" "mkdesktop man page"
+.TH man 1 "20 April, 2021" "5.0" "mkdesktop man page"
 
 .SH NAME
 mkdesktop
@@ -55,11 +55,18 @@ convenience mkdesktop soon becomes.
 .SH SEE ALSO
 desktop-installer(1)
 
-.SH BUGS
-mkdesktop is best used in a pristine environment when system files
-(e.g. /etc/fstab; /etc/rc.conf) have not yet been modified. Executing
-mkdesktop when system files have been modified could lead to
+.SH BUGS AND LIMITATIONS
+mkdesktop is best used in a pristine (newly installed) environment when
+system files (e.g. /etc/fstab; /etc/rc.conf) have not yet been modified.
+Executing mkdesktop when system files have been modified could lead to
 conflicts in existing settings and settings imposed by mkdesktop.
+
+Beginning with mkdesktop version 5.0, the script targets FreeBSD
+RELEASE Major 13 or higher. If you run mkdesktop on 11.x/12.y, you will
+first (i.e. before running mkdesktop) need to manually install the
+package hal and then append the following line to /etc/rc.conf:
+
+hald_enable=YES
 
 .SH AUTHOR
 Manish Jain (bourne.identity@hotmail.com)

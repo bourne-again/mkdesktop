@@ -14,7 +14,7 @@ die()
 
 if [ $# -eq 1 ]; then
 	if [ "$1" = "--help" ]; then
-		man mkdesktop
+		man `basename \`realpath $0\``
 		exit 0
 	fi
 fi
@@ -30,7 +30,7 @@ f_stagezero()
 	2 radeon off \
 	3 amdgpu off \
 	4 intel off \
-	5 Other off`
+	5 Other/Ignore off`
 	
 	r=$?
 
@@ -240,15 +240,13 @@ linsysfs /compat/linux/sys linsysfs rw 0 0\""
 			eval mandatory${mangled}="\"\
 devfs_system_ruleset=system
 dbus_enable=YES
-hald_enable=YES
 cupsd_enable=YES\""
 		else
 			eval mandatory${mangled}="\"\
 devfs_system_ruleset=system
 dbus_enable=YES
-hald_enable=YES
-linux_enable=YES
-cupsd_enable=YES\""
+cupsd_enable=YES
+linux_enable=YES\""
 		fi
 	}
 
@@ -377,12 +375,13 @@ fi
 
 pkglist=""
 
-out=`dialog --stdout --radiolist "Select a desktop environment to install:" 20 30 5 \
+out=`dialog --stdout --radiolist "Select a desktop environment to install:" 24 30 6 \
 1 KDE on \
 2 GNOME off \
 3 XFCE off \
 4 MATE off \
-5 LXDE off`
+5 LXDE off \
+6 Awesome (Tiling Window Manager) off`
 
 r=$?
 
@@ -393,9 +392,10 @@ if [ $r -eq 0 ]; then
 		3) desktop="xfce";;
 		4) desktop="mate";;
 		5) desktop="lxde-meta";;
+		6) desktop="awesome";;
 	esac
 
-	pkglist="xorg sddm hal dbus $desktop"
+	pkglist="xorg sddm dbus $desktop"
 
 	r=1
 	
